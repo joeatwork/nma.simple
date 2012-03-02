@@ -1,0 +1,22 @@
+# nma.simple
+
+A simple matrix compression tool, written closely following
+"Algorithms for Non-negative Matrix Factorization"
+By Daniel D. Lee and H. Sebastian Seung, 2001
+
+For use with incanter (http://incanter.org)
+
+
+## Usage
+
+(use 'nma.simple)
+
+
+
+(non-negative-factorization 
+
+## License
+
+Copyright (C) 2012 Joe Bowers
+
+Distributed under the Eclipse Public License, the same as Clojure.
