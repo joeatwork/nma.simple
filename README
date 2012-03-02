@@ -10,10 +10,11 @@ For use with incanter (http://incanter.org)
 ## Usage
 
 (use 'nma.simple)
+(def giganticus 
+     (for [ i (range 400) ]
+     	  (for [ j (range 500) ] (Math/random))))
 
-
-
-(non-negative-factorization 
+(non-negative-factor-approx giganticus 10)
 
 ## License
 

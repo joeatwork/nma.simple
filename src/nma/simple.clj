@@ -23,19 +23,10 @@
   "Completely for keeping giant matrices out of memory.
    Expect this to be much slower (but much less swapular)
    than just (sel i j (mmult M N))"
-
-  ;;; THIS IS THE BOTTLENECK!
-  
-  ([i j M]
-     (sel M i j))
-  ([i j M N]
-     (let [M-row-i (sel M :rows i)
-           N-col-j (sel N :cols j)]
-       (mmult M-row-i N-col-j)))
-  ([i j M N & rest]     
-     (let [M-row-i (sel M :rows i)
-           MN-row-i (mmult M-row-i N)]
-       (apply item-in-product 0 j MN-row-i rest))))
+  [i j M N]
+  (let [M-row-i (sel M :rows i)
+        N-col-j (sel N :cols j)]
+    (mmult M-row-i N-col-j)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -44,33 +35,48 @@
   (let [delta (- x y)]
     (* delta delta)))
 
-(defn- improve-H-distance
-  ;; For M (n,m) W(n,q) H(q,m)
-  ;; This requires
-  ;; (n * m) * ((q * n * m) + (q * n * q * m)) operations.
-  ;;
-  ;; which is a TON.
-  ;;
-  ;; So keep q small.
-  
+;; For M (n,m) W(n,q) H(q,m)
+;; improve functions run in n*n*q*q*m*m time!
+;; So choose small q, and go get some coffee...
+(defn- improve-H-distance  
   [M W H]
+
+  ;; WORTH A TRY- IMPROVE WITH
+  ;; http://incanter.org/docs/parallelcolt/api/cern/colt/matrix/tdouble/DoubleMatrix2D.html
+  ;; Maybe (. toarray W-trans) (. toarray M)
+  ;; OR
+  ;; zMult ?
+  ;; OR
+  ;; Just get slices of Matrixes via incanter FIRST, then pmap
+  ;; over the slices?
   (let [W-trans (trans W)
-        new-elements
-        (for [i (range (nrow H)) j (range (ncol H))]
+        W-trans-W (mmult W-trans W)
+        H-indexes (for [i (range (nrow H)) j (range (ncol H))] [i j])
+        H-element-at
+        (fn [[i j]]
           (* (sel H i j)
              (item-in-product i j W-trans M)
-             (recip (item-in-product i j W-trans W H))))]
-    (matrix new-elements (ncol H))))
+             (recip (item-in-product i j W-trans-W H))))
+
+        ;; This pmap seems to give an incredibly slight
+        ;; improvement with 4 cores. I suspect things are synchronized
+        ;; in incanter/Colt to the point that I can't really
+        ;; run in parallel at all.
+        H-elements (pmap H-element-at H-indexes)]
+    (matrix H-elements (ncol H))))
 
 (defn- improve-W-distance
   [M W H]
   (let [H-trans (trans H)
-        new-elements
-        (for [i (range (nrow W)) j (range (ncol W))]
+        H-H-trans (mmult H H-trans)
+        W-indexes (for [i (range (nrow W)) j (range (ncol W))] [i j])
+        W-element-at
+        (fn [[i j]]
           (* (sel W i j)
              (item-in-product i j M H-trans)
-             (recip (item-in-product i j W H H-trans))))]
-    (matrix new-elements (ncol W))))
+             (recip (item-in-product i j W H-H-trans))))
+        W-elements (pmap W-element-at W-indexes)]
+    (matrix W-elements (ncol W))))
 
 (def distance-costs
   ^{:doc "Cost fn and minimizers associated with euclidean distance between matrices"}
