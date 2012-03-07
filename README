@@ -1,20 +1,35 @@
 # nma.simple
 
-A simple matrix compression tool, written closely following
+A simple tool for feature extraction from
+matrices with only positive or zero elements.
+The algorithm in this module was written closely
+following
+
 "Algorithms for Non-negative Matrix Factorization"
 By Daniel D. Lee and H. Sebastian Seung, 2001
 
-For use with incanter (http://incanter.org)
+Use of nma.simple requires incanter 
+(http://incanter.org)
 
 
 ## Usage
 
 (use 'nma.simple)
 (def giganticus 
-     (for [ i (range 400) ]
-     	  (for [ j (range 500) ] (Math/random))))
+  (for [ i (range 400) ]
+    (for [ j (range 500) ]
+      (+ 3 (* 
+            (Math/sin (/ (* 2 Math/PI) i))
+            (Math/cos (/ (* 2 Math/PI) j)))))))
+
 
 (non-negative-factor-approx giganticus 10)
+
+;; OR
+
+(require 'nma.demo)
+(nma.demo/image-demo "test/mona-lisa-bw.png" 
+		     "test/mona-lisa-factored.png" 20)
 
 ## License
 

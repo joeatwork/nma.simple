@@ -32,7 +32,7 @@
 
 (defn- euclidean-distance-squared
   [ x y ]
-  (let [delta (- x y)]
+  (let [delta (- x y)]    
     (* delta delta)))
 
 ;; For M (n,m) W(n,q) H(q,m)
@@ -41,41 +41,35 @@
 (defn- improve-H-distance  
   [M W H]
 
-  ;; WORTH A TRY- IMPROVE WITH
-  ;; http://incanter.org/docs/parallelcolt/api/cern/colt/matrix/tdouble/DoubleMatrix2D.html
-  ;; Maybe (. toarray W-trans) (. toarray M)
-  ;; OR
-  ;; zMult ?
-  ;; OR
-  ;; Just get slices of Matrixes via incanter FIRST, then pmap
-  ;; over the slices?
   (let [W-trans (trans W)
         W-trans-W (mmult W-trans W)
+        W-trans-M (mmult W-trans M)
+        W-trans-W-H (mmult W-trans-W H)
         H-indexes (for [i (range (nrow H)) j (range (ncol H))] [i j])
+
+        ;; Take a closer look at incanter matrix api, you're
+        ;; missing stuff here.
         H-element-at
         (fn [[i j]]
           (* (sel H i j)
-             (item-in-product i j W-trans M)
-             (recip (item-in-product i j W-trans-W H))))
-
-        ;; This pmap seems to give an incredibly slight
-        ;; improvement with 4 cores. I suspect things are synchronized
-        ;; in incanter/Colt to the point that I can't really
-        ;; run in parallel at all.
-        H-elements (pmap H-element-at H-indexes)]
+             (sel W-trans-M i j)
+             (recip (sel W-trans-W-H i j))))
+        H-elements (map H-element-at H-indexes)]
     (matrix H-elements (ncol H))))
 
 (defn- improve-W-distance
   [M W H]
   (let [H-trans (trans H)
         H-H-trans (mmult H H-trans)
+        M-H-trans (mmult M H-trans)
+        W-H-H-trans (mmult W H-H-trans)
         W-indexes (for [i (range (nrow W)) j (range (ncol W))] [i j])
         W-element-at
         (fn [[i j]]
           (* (sel W i j)
-             (item-in-product i j M H-trans)
-             (recip (item-in-product i j W H-H-trans))))
-        W-elements (pmap W-element-at W-indexes)]
+             (sel M-H-trans i j)
+             (recip (sel W-H-H-trans i j))))
+        W-elements (map W-element-at W-indexes)]
     (matrix W-elements (ncol W))))
 
 (def distance-costs
@@ -96,9 +90,7 @@
     (sum costs-by-part)))
 
 (defn factorings
-  "costs should be relative-entropy-costs or a similar structure
-
-   given an n x m matrix M, and integer r,
+  "given an n x m matrix M, and integer r,
    Produces an (EXPENSIVE, INFINITE) LAZY SEQUENCE OF [ cost W H ]
    Where W is an n x r matrix, H is an r x m matrix,
    and cost is a measure of how closely W H approximates M,
@@ -155,7 +147,9 @@
                         0)
           _ (when chatty
               (println "Searching for best factorization"
-                       " try " tries ", improvement " improvement))]
+                       "last cost" last-cost
+                       "this cost" next-cost
+                       "try " tries ",improvement " improvement))]
       (if (or (< threshold-improvement improvement)
               (< max-tries tries))
         [tries improvement next-try]
@@ -163,7 +157,15 @@
 
 
 (defn non-negative-factor-approx
-  "A simple UI for factoring a given matrix, with sensible defaults"
+  "A simple UI for factoring a given matrix with all postive or zero elements, with sensible defaults"
   [M r & args]
-  (let [iterations (factorings M r)]
-    (apply good-enough-factoring iterations args)))
+  (let [M (matrix M)]
+    (doseq [ i (range (nrow M)) j (range (ncol M))]
+      (when-not (<= 0 (sel M i j))
+        (throw (Exception. (str "Element " i ", " j " of matrix == " (sel M i j) ", not zero or positive")))))    
+    (let [iterations (factorings M r)
+          [tries improvement factoring] (apply good-enough-factoring iterations args)
+          [cost W H] factoring
+          ]
+      [W H])))
+
